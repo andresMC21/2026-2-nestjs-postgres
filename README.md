@@ -2,7 +2,7 @@
 
 Proyecto base para las prácticas del curso **Computación en Internet 3**. Es una API REST construida con [NestJS](https://nestjs.com/) que se conecta a una base de datos **PostgreSQL** usando **TypeORM**.
 
-Este repositorio sirve como punto de partida: trae la configuración inicial (conexión a la base de datos, validaciones globales, prefijo de rutas) y un módulo de ejemplo (`student`) que irán completando en clase.
+Este repositorio sirve como punto de partida: trae la configuración inicial (conexión a la base de datos, validaciones globales, prefijo de rutas) y el módulo `student`, que ya tiene su entidad, su DTO de creación y un primer endpoint funcionando, y que se irá completando en clase (actualizar, listar, eliminar).
 
 ## Stack y dependencias
 
@@ -46,9 +46,13 @@ src/
 ├── main.ts                     # Punto de entrada: arranca la app, prefijo global, validaciones
 ├── app.module.ts                # Módulo raíz: config, conexión a la BD, módulos de features
 └── student/
-    ├── student.module.ts        # Módulo de la feature "student"
-    ├── student.controller.ts    # Rutas HTTP de "student" (por implementar)
-    └── student.service.ts       # Lógica de negocio de "student" (por implementar)
+    ├── student.module.ts        # Módulo de la feature "student" (registra la entidad con TypeOrmModule.forFeature)
+    ├── student.controller.ts    # Rutas HTTP de "student" (por ahora: crear)
+    ├── student.service.ts       # Lógica de negocio de "student" (por ahora: crear)
+    ├── dto/
+    │   └── create-student.dto.ts  # Reglas de validación para crear un student
+    └── entities/
+        └── student.entity.ts      # Entidad TypeORM: tabla "student"
 test/
 └── app.e2e-spec.ts              # Prueba end-to-end de ejemplo
 ```
@@ -87,7 +91,7 @@ Cada nueva funcionalidad del curso debería seguir este mismo patrón: una carpe
    npm run start:dev
    ```
 
-4. La API queda disponible en `http://localhost:9000/student` (ver [Puntos clave](#puntos-clave) sobre el prefijo global).
+4. La API queda disponible en `http://localhost:9000/api/student` (ver [Puntos clave](#puntos-clave) sobre el prefijo global y [Endpoints disponibles](#endpoints-disponibles)).
 
 ## Scripts disponibles
 
@@ -129,6 +133,24 @@ El [Nest CLI](https://docs.nestjs.com/cli/overview) (`nest`, instalado como depe
 
 > Tip: se puede indicar la carpeta destino del recurso generado, por ejemplo `nest g mo course` crea `src/course/course.module.ts`. Así es como se generó la estructura de `src/student/`.
 
+## Endpoints disponibles
+
+Con el prefijo global `api` (definido en `main.ts`) y el prefijo `student` del controlador, las rutas quedan bajo `/api/student`.
+
+| Método | Ruta | Descripción | Body |
+|---|---|---|---|
+| `POST` | `/api/student` | Crea un estudiante | `{ "name": string, "age": number, "email": string, "isActive": boolean }` |
+
+Ejemplo de request:
+
+```bash
+curl -X POST http://localhost:9000/api/student \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Ana Pérez","age":21,"email":"ana@example.com","isActive":true}'
+```
+
+Los endpoints de listar, obtener por id, actualizar y eliminar todavía no están implementados — son el siguiente paso del CRUD que se completará en clase.
+
 ## Puntos clave
 
 Estos son los conceptos importantes que se están usando en este proyecto y que van a reutilizar durante el curso:
@@ -145,15 +167,25 @@ Estos son los conceptos importantes que se están usando en este proyecto y que 
   - `whitelist: true`: elimina del `body` cualquier propiedad que no esté declarada en el DTO.
   - `forbidNonWhitelisted: true`: si llega una propiedad no declarada, la petición falla con un error 400 en lugar de ignorarla silenciosamente.
 
-- **Prefijo global de rutas** (`app.setGlobalPrefix('student')` en `main.ts`): todas las rutas de la aplicación quedan bajo `/student`. Esto es temporal/particular de este arranque del proyecto — cuando agreguen más módulos (por ejemplo `course`, `enrollment`), probablemente deban quitar este prefijo global y manejar el prefijo por controlador con `@Controller('student')`, `@Controller('course')`, etc.
+- **Prefijo global de rutas** (`app.setGlobalPrefix('api')` en `main.ts`): todas las rutas de la aplicación quedan bajo `/api`. Cada controlador agrega su propio prefijo encima (`@Controller('student')`), por eso la ruta final es `/api/student`. Al agregar nuevos módulos (por ejemplo `course`, `enrollment`) solo hace falta definir el `@Controller('course')` correspondiente; el `/api` ya queda cubierto por el prefijo global.
 
-- **DTOs + `class-validator`/`class-transformer`**: los DTOs (`create-*.dto.ts`, `update-*.dto.ts`) son las clases que definen la forma y las reglas de validación de los datos que entran por la API. `@nestjs/mapped-types` (`PartialType`) permite crear el DTO de actualización reutilizando el de creación, sin duplicar campos.
+- **DTOs + `class-validator`/`class-transformer`**: los DTOs (`create-*.dto.ts`, `update-*.dto.ts`) son las clases que definen la forma y las reglas de validación de los datos que entran por la API. `CreateStudent` (`src/student/dto/create-student.dto.ts`) es el primer ejemplo: valida `name`, `age`, `email` e `isActive`. `@nestjs/mapped-types` (`PartialType`) permite crear el DTO de actualización reutilizando el de creación, sin duplicar campos — todavía no se ha creado ese `update-student.dto.ts`.
 
-- **Módulo `student` aún vacío**: `StudentController` y `StudentService` están creados pero sin lógica ni rutas. Es el punto de partida para implementar el CRUD durante las clases (entidad, DTOs, endpoints).
+- **Entidades TypeORM** (`src/student/entities/student.entity.ts`): la clase `Student`, decorada con `@Entity()`, define la tabla `student` en la base de datos. Cada `@Column()` es una columna (`name`, `age`, `email` con `unique: true`, `isActive`, `nickname`). `@PrimaryGeneratedColumn("uuid")` hace que el `id` se genere automáticamente como UUID.
+
+- **Hooks de ciclo de vida (`@BeforeInsert` / `@BeforeUpdate`)**: en `Student`, antes de guardar o actualizar un registro, TypeORM ejecuta `checkNicknameInsert()` / `checkNicknameUpdate()`, que arman el `nickname` a partir del `name` y el `age` si no vino informado. Es un buen ejemplo de lógica que vive en la entidad en lugar del servicio.
+
+- **Repositorios con `TypeOrmModule.forFeature()` e `@InjectRepository()`**: `StudentModule` registra la entidad `Student` con `TypeOrmModule.forFeature([Student])`, lo que habilita inyectar su repositorio en el servicio con `@InjectRepository(Student) private readonly studentRepository: Repository<Student>`. El repositorio (`studentRepository.create()`, `.save()`, etc.) es la forma estándar de leer/escribir en la base de datos con TypeORM dentro de Nest.
+
+- **Endpoint de creación** (`StudentController.create` → `StudentService.createStudent`): el controlador recibe el `body` ya validado como `CreateStudent` y delega en el servicio, que arma la entidad con `studentRepository.create(...)` y la persiste con `studentRepository.save(...)`. Ver [Endpoints disponibles](#endpoints-disponibles).
 
 ## ⚠️ Cosas a revisar (para practicar debugging)
 
 - En `src/app.module.ts`, la línea `port: +!process.env.DB_PORT` no calcula el puerto correctamente: el operador `!` niega el valor *antes* de convertirlo a número, por lo que el puerto configurado en `DB_PORT` nunca se usa como tal. Es un buen ejercicio identificar por qué y corregirlo (pista: comparar con cómo se leen las demás variables de entorno en el mismo bloque).
+
+- En `src/student/student.service.ts`, `createStudent` atrapa cualquier error al guardar y lanza un `NotFoundException`. Semánticamente no tiene sentido: "no encontrado" es un error de lectura (404), no de escritura. Si, por ejemplo, se repite un `email` (la columna es `unique`), el error real es un conflicto/dato inválido. Piensen qué excepción de Nest (`BadRequestException`, `ConflictException`, etc.) describe mejor cada caso de falla.
+
+- En `src/student/entities/student.entity.ts`, `checkNicknameInsert`/`checkNicknameUpdate` arman el `nickname` con `this.nickname.toLowerCase().replace(" ", "_")`. `String.replace` con un string (no una expresión regular con `/g`) solo reemplaza la **primera** coincidencia, así que un nombre con varios espacios ("Ana María Pérez") no queda completamente convertido a `snake_case`. ¿Cómo lo arreglarían para que reemplace todos los espacios?
 
 ## Pruebas
 
