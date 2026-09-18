@@ -1,4 +1,5 @@
-import { IsString, IsNumber, IsPositive, IsEmail, IsBoolean } from "class-validator";
+import { IsString, IsNumber, IsPositive, IsEmail, IsBoolean, IsIn, IsArray, IsOptional } from "class-validator";
+import { Grades } from "../entities/grades.entity";
 
 export class CreateStudent{
 
@@ -15,4 +16,16 @@ export class CreateStudent{
 
     @IsBoolean()
     isActive: boolean;
+
+    @IsString()
+    @IsIn(['Male', 'Female', 'Other'])
+    gender: string;
+
+    @IsArray()
+    @IsOptional()
+    favoriteSubjects: string[];
+
+    @IsArray()
+    @IsOptional()
+    grades: Grades[];
 }

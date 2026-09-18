@@ -1,4 +1,5 @@
-import { BeforeInsert, BeforeUpdate, Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { BeforeInsert, BeforeUpdate, Column, Entity, OneToMany, PrimaryGeneratedColumn } from "typeorm";
+import { Grades } from "./grades.entity";
 
 @Entity()
 export class Student {
@@ -26,7 +27,23 @@ export class Student {
     isActive: boolean;
 
     @Column("text")
+    gender: string;
+
+    @Column({
+        type: "text",
+        array: true
+    })
+    favoriteSubjects:string[];
+
+    @Column("text")
     nickname: string;
+
+    @OneToMany(
+        ()=> Grades,
+        (grade) => grade.student,
+        {cascade: true, eager: true}
+    )
+    grades?: Grades[]
 
     @BeforeInsert()
     checkNicknameInsert(){

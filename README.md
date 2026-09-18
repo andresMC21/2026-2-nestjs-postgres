@@ -2,7 +2,7 @@
 
 Proyecto base para las prácticas del curso **Computación en Internet 3**. Es una API REST construida con [NestJS](https://nestjs.com/) que se conecta a una base de datos **PostgreSQL** usando **TypeORM**.
 
-Este repositorio sirve como punto de partida: trae la configuración inicial (conexión a la base de datos, validaciones globales, prefijo de rutas) y el módulo `student`, que ya tiene su entidad, su DTO de creación y un primer endpoint funcionando, y que se irá completando en clase (actualizar, listar, eliminar).
+Este repositorio sirve como punto de partida: trae la configuración inicial (conexión a la base de datos, validaciones globales, prefijo de rutas) y el módulo `student`, que ya tiene sus entidades (`Student` y `Grades`, relacionadas 1:N), DTOs de creación y paginación, y los endpoints de crear, listar y buscar. Actualizar y eliminar quedan como siguiente paso para completar en clase.
 
 ## Stack y dependencias
 
@@ -46,13 +46,15 @@ src/
 ├── main.ts                     # Punto de entrada: arranca la app, prefijo global, validaciones
 ├── app.module.ts                # Módulo raíz: config, conexión a la BD, módulos de features
 └── student/
-    ├── student.module.ts        # Módulo de la feature "student" (registra la entidad con TypeOrmModule.forFeature)
-    ├── student.controller.ts    # Rutas HTTP de "student" (por ahora: crear)
-    ├── student.service.ts       # Lógica de negocio de "student" (por ahora: crear)
+    ├── student.module.ts        # Módulo de la feature "student" (registra Student y Grades con TypeOrmModule.forFeature)
+    ├── student.controller.ts    # Rutas HTTP de "student": crear, listar, buscar
+    ├── student.service.ts       # Lógica de negocio de "student"
     ├── dto/
-    │   └── create-student.dto.ts  # Reglas de validación para crear un student
+    │   ├── create-student.dto.ts  # Reglas de validación para crear un student (incluye sus grades)
+    │   └── pagination.dto.ts      # Query params `limit`/`skip` para paginar el listado
     └── entities/
-        └── student.entity.ts      # Entidad TypeORM: tabla "student"
+        ├── student.entity.ts      # Entidad TypeORM: tabla "student"
+        └── grades.entity.ts       # Entidad TypeORM: tabla "grades" (relación N:1 con student)
 test/
 └── app.e2e-spec.ts              # Prueba end-to-end de ejemplo
 ```
@@ -137,19 +139,55 @@ El [Nest CLI](https://docs.nestjs.com/cli/overview) (`nest`, instalado como depe
 
 Con el prefijo global `api` (definido en `main.ts`) y el prefijo `student` del controlador, las rutas quedan bajo `/api/student`.
 
-| Método | Ruta | Descripción | Body |
+| Método | Ruta | Descripción | Body / Query params |
 |---|---|---|---|
-| `POST` | `/api/student` | Crea un estudiante | `{ "name": string, "age": number, "email": string, "isActive": boolean }` |
+| `POST` | `/api/student` | Crea un estudiante (opcionalmente con sus notas) | `{ name, age, email, isActive, gender, favoriteSubjects?, grades? }` |
+| `GET` | `/api/student` | Lista estudiantes, paginado | Query: `limit?` (cantidad), `skip?` (offset) |
+| `GET` | `/api/student/:term` | Busca un estudiante por `id` (UUID), por `name` o por `nickname` | — |
 
-Ejemplo de request:
+Ejemplos de request:
 
 ```bash
+# Crear un estudiante con sus notas
 curl -X POST http://localhost:9000/api/student \
   -H "Content-Type: application/json" \
-  -d '{"name":"Ana Pérez","age":21,"email":"ana@example.com","isActive":true}'
+  -d '{
+    "name": "Ana Pérez",
+    "age": 21,
+    "email": "ana@example.com",
+    "isActive": true,
+    "gender": "Female",
+    "favoriteSubjects": ["Math", "History"],
+    "grades": [
+      { "subject": "Math", "grade": 90 },
+      { "subject": "History", "grade": 85 }
+    ]
+  }'
+
+# Listar (paginado)
+curl "http://localhost:9000/api/student?limit=10&skip=0"
+
+# Buscar por id, por nombre o por nickname
+curl http://localhost:9000/api/student/<uuid>
+curl http://localhost:9000/api/student/ana_perez21
 ```
 
-Los endpoints de listar, obtener por id, actualizar y eliminar todavía no están implementados — son el siguiente paso del CRUD que se completará en clase.
+También hay una **colección de Postman lista para importar** en [`postman/compunet3-nestjs-postgres.postman_collection.json`](postman/compunet3-nestjs-postgres.postman_collection.json) con estas mismas peticiones (ver [Colección de Postman](#colección-de-postman)).
+
+Actualizar y eliminar todavía no están implementados — son el siguiente paso del CRUD que se completará en clase.
+
+## Colección de Postman
+
+En [`postman/compunet3-nestjs-postgres.postman_collection.json`](postman/compunet3-nestjs-postgres.postman_collection.json) está la colección con las peticiones de "Crear estudiante", "Listar estudiantes (paginado)" y "Buscar estudiante (id, name o nickname)".
+
+Para usarla:
+
+1. Abrir Postman → **File → Import** → seleccionar el archivo.
+2. La colección trae la variable `baseUrl` ya configurada en `http://localhost:9000/api` (ajustarla si cambian el puerto en `main.ts`).
+3. Para "Buscar estudiante", completar la variable de colección `studentTerm` (o editar el valor directamente en la pestaña **Params** del request) con el `id`, `name` o `nickname` de un estudiante que ya hayan creado.
+4. Con la app corriendo (`npm run start:dev`) y la base de datos disponible, ejecutar las peticiones en orden: primero crear, después listar/buscar.
+
+Cuando implementen `update`/`delete` en clase, agreguen esos requests a la misma carpeta "Student" de la colección para mantenerla al día.
 
 ## Puntos clave
 
@@ -169,21 +207,29 @@ Estos son los conceptos importantes que se están usando en este proyecto y que 
 
 - **Prefijo global de rutas** (`app.setGlobalPrefix('api')` en `main.ts`): todas las rutas de la aplicación quedan bajo `/api`. Cada controlador agrega su propio prefijo encima (`@Controller('student')`), por eso la ruta final es `/api/student`. Al agregar nuevos módulos (por ejemplo `course`, `enrollment`) solo hace falta definir el `@Controller('course')` correspondiente; el `/api` ya queda cubierto por el prefijo global.
 
-- **DTOs + `class-validator`/`class-transformer`**: los DTOs (`create-*.dto.ts`, `update-*.dto.ts`) son las clases que definen la forma y las reglas de validación de los datos que entran por la API. `CreateStudent` (`src/student/dto/create-student.dto.ts`) es el primer ejemplo: valida `name`, `age`, `email` e `isActive`. `@nestjs/mapped-types` (`PartialType`) permite crear el DTO de actualización reutilizando el de creación, sin duplicar campos — todavía no se ha creado ese `update-student.dto.ts`.
+- **DTOs + `class-validator`/`class-transformer`**: los DTOs (`create-*.dto.ts`, `update-*.dto.ts`) son las clases que definen la forma y las reglas de validación de los datos que entran por la API. `CreateStudent` (`src/student/dto/create-student.dto.ts`) valida `name`, `age`, `email`, `isActive`, `gender` (`@IsIn(['Male', 'Female', 'Other'])`) y, de forma opcional, `favoriteSubjects` y `grades`. `@nestjs/mapped-types` (`PartialType`) permite crear el DTO de actualización reutilizando el de creación, sin duplicar campos — todavía no se ha creado ese `update-student.dto.ts`.
 
-- **Entidades TypeORM** (`src/student/entities/student.entity.ts`): la clase `Student`, decorada con `@Entity()`, define la tabla `student` en la base de datos. Cada `@Column()` es una columna (`name`, `age`, `email` con `unique: true`, `isActive`, `nickname`). `@PrimaryGeneratedColumn("uuid")` hace que el `id` se genere automáticamente como UUID.
+- **Entidades TypeORM** (`src/student/entities/student.entity.ts`): la clase `Student`, decorada con `@Entity()`, define la tabla `student` en la base de datos. Cada `@Column()` es una columna (`name`, `age`, `email` con `unique: true`, `isActive`, `gender`, `favoriteSubjects` como `text` con `array: true`, `nickname`). `@PrimaryGeneratedColumn("uuid")` hace que el `id` se genere automáticamente como UUID.
 
 - **Hooks de ciclo de vida (`@BeforeInsert` / `@BeforeUpdate`)**: en `Student`, antes de guardar o actualizar un registro, TypeORM ejecuta `checkNicknameInsert()` / `checkNicknameUpdate()`, que arman el `nickname` a partir del `name` y el `age` si no vino informado. Es un buen ejemplo de lógica que vive en la entidad en lugar del servicio.
 
-- **Repositorios con `TypeOrmModule.forFeature()` e `@InjectRepository()`**: `StudentModule` registra la entidad `Student` con `TypeOrmModule.forFeature([Student])`, lo que habilita inyectar su repositorio en el servicio con `@InjectRepository(Student) private readonly studentRepository: Repository<Student>`. El repositorio (`studentRepository.create()`, `.save()`, etc.) es la forma estándar de leer/escribir en la base de datos con TypeORM dentro de Nest.
+- **Relación 1:N entre `Student` y `Grades`** (`src/student/entities/grades.entity.ts`): cada estudiante puede tener muchas notas (`subject` + `grade`). Se modela con `@OneToMany(() => Grades, grade => grade.student, { cascade: true, eager: true })` en `Student` y `@ManyToOne(() => Student, student => student.grades, { onDelete: "CASCADE" })` en `Grades`. `cascade: true` permite guardar las `grades` al mismo tiempo que el `student` (sin insertarlas aparte); `eager: true` hace que siempre se traigan las notas al consultar un estudiante, sin pedirlo explícitamente; `onDelete: "CASCADE"` borra las notas de un estudiante si el estudiante se elimina.
 
-- **Endpoint de creación** (`StudentController.create` → `StudentService.createStudent`): el controlador recibe el `body` ya validado como `CreateStudent` y delega en el servicio, que arma la entidad con `studentRepository.create(...)` y la persiste con `studentRepository.save(...)`. Ver [Endpoints disponibles](#endpoints-disponibles).
+- **Repositorios con `TypeOrmModule.forFeature()` e `@InjectRepository()`**: `StudentModule` registra ambas entidades con `TypeOrmModule.forFeature([Student, Grades])`, lo que habilita inyectar sus repositorios en el servicio (`@InjectRepository(Student)`, `@InjectRepository(Grades)`). El repositorio (`.create()`, `.save()`, `.find()`, `.findOneBy()`, `createQueryBuilder()`, etc.) es la forma estándar de leer/escribir en la base de datos con TypeORM dentro de Nest.
+
+- **Endpoint de creación** (`StudentController.create` → `StudentService.createStudent`): recibe el `body` ya validado como `CreateStudent`, separa las `grades` del resto de los datos, crea cada nota con `gradesRepository.create(...)` y arma el `student` con esas notas anidadas antes de guardar (`studentRepository.save(student)` persiste ambas entidades gracias al `cascade: true`).
+
+- **Paginación con `PaginationDto`** (`GET /api/student`): `limit` y `skip` llegan como *query params*, es decir, como strings. `@Type(() => Number)` (de `class-transformer`) los convierte a número antes de validarlos con `@IsPositive()`/`@Min(0)`. El servicio los pasa directo a las opciones `take`/`skip` de `studentRepository.find()`.
+
+- **Búsqueda flexible en `findOne`** (`GET /api/student/:term`): si el `term` es un UUID (`isUUID()` de `class-validator`) se busca por `id` con `findOneBy`; si no, se arma un `createQueryBuilder()` que compara `UPPER(name)` o `nickname` contra el término, y hace `leftJoinAndSelect("student.grades", ...)` para traer también sus notas.
 
 ## ⚠️ Cosas a revisar (para practicar debugging)
 
 - En `src/app.module.ts`, la línea `port: +!process.env.DB_PORT` no calcula el puerto correctamente: el operador `!` niega el valor *antes* de convertirlo a número, por lo que el puerto configurado en `DB_PORT` nunca se usa como tal. Es un buen ejercicio identificar por qué y corregirlo (pista: comparar con cómo se leen las demás variables de entorno en el mismo bloque).
 
-- En `src/student/student.service.ts`, `createStudent` atrapa cualquier error al guardar y lanza un `NotFoundException`. Semánticamente no tiene sentido: "no encontrado" es un error de lectura (404), no de escritura. Si, por ejemplo, se repite un `email` (la columna es `unique`), el error real es un conflicto/dato inválido. Piensen qué excepción de Nest (`BadRequestException`, `ConflictException`, etc.) describe mejor cada caso de falla.
+- En `src/student/student.service.ts`, `handleException` **solo relanza el error si `error.code === '23505'`** (violación de `unique` en Postgres). Para cualquier otro error, el método registra el log y no hace `throw`: la función que llamó (`createStudent`, `findAll`, `findOne`) termina devolviendo `undefined` en silencio, en vez de propagar el fallo. Esto es especialmente delicado en `findOne`: el `throw new NotFoundException(...)` que se lanza explícitamente cuando no se encuentra el estudiante también es capturado por el mismo `catch`, pasa por `handleException` y, como no tiene `code === '23505'`, **se pierde** — el endpoint termina respondiendo distinto a un 404 real. Piensen cómo debería relanzar (`throw`) el error por defecto, y solo dar un manejo especial a los códigos de Postgres que les interese distinguir.
+
+- Ese mismo `error.code === '23505'` se traduce hoy en un `InternalServerErrorException` (500). Una violación de `unique` (por ejemplo, un `email` repetido) es un error del cliente, no del servidor: ¿qué excepción de Nest (`BadRequestException`, `ConflictException`, etc.) describe mejor ese caso?
 
 - En `src/student/entities/student.entity.ts`, `checkNicknameInsert`/`checkNicknameUpdate` arman el `nickname` con `this.nickname.toLowerCase().replace(" ", "_")`. `String.replace` con un string (no una expresión regular con `/g`) solo reemplaza la **primera** coincidencia, así que un nombre con varios espacios ("Ana María Pérez") no queda completamente convertido a `snake_case`. ¿Cómo lo arreglarían para que reemplace todos los espacios?
 

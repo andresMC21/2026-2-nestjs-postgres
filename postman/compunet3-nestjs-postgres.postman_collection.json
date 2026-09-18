@@ -1,0 +1,108 @@
+{
+  "info": {
+    "_postman_id": "ded166a3-02bc-455c-b60f-054b8aecba71",
+    "name": "CompuNet3 - NestJS + PostgreSQL",
+    "description": "Colección para probar la API del curso Computación en Internet 3 (NestJS + TypeORM + PostgreSQL). Usa la variable de colección {{baseUrl}} (por defecto http://localhost:9000/api) para no repetir la URL en cada request.\n\nAntes de usarla: levantar la app con `npm run start:dev` y tener PostgreSQL corriendo con las credenciales definidas en el `.env` del proyecto.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:9000/api",
+      "type": "string"
+    },
+    {
+      "key": "studentTerm",
+      "value": "",
+      "type": "string",
+      "description": "id (UUID), name o nickname de un estudiante existente, para usar en 'Buscar estudiante'"
+    }
+  ],
+  "item": [
+    {
+      "id": "ee450cfd-1373-432c-909a-094b8c048b25",
+      "name": "Student",
+      "description": "Endpoints del módulo student",
+      "item": [
+        {
+          "id": "b218fbf2-5da4-4609-ab89-25b117ede08c",
+          "name": "Crear estudiante",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ana Pérez\",\n  \"age\": 21,\n  \"email\": \"ana@example.com\",\n  \"isActive\": true,\n  \"gender\": \"Female\",\n  \"favoriteSubjects\": [\"Math\", \"History\"],\n  \"grades\": [\n    { \"subject\": \"Math\", \"grade\": 90 },\n    { \"subject\": \"History\", \"grade\": 85 }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/student",
+              "host": ["{{baseUrl}}"],
+              "path": ["student"]
+            },
+            "description": "Crea un estudiante. `gender` debe ser 'Male', 'Female' u 'Other' (@IsIn en CreateStudent). `favoriteSubjects` y `grades` son opcionales; si se envían `grades`, se guardan junto con el estudiante gracias al `cascade: true` de la relación Student -> Grades."
+          },
+          "response": []
+        },
+        {
+          "id": "4b38378b-855e-45a2-909f-d272561b9785",
+          "name": "Listar estudiantes (paginado)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/student?limit=10&skip=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["student"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Cantidad máxima de estudiantes a devolver (opcional)"
+                },
+                {
+                  "key": "skip",
+                  "value": "0",
+                  "description": "Cantidad de estudiantes a saltar, para paginar (opcional)"
+                }
+              ]
+            },
+            "description": "Lista estudiantes con paginación. `limit` y `skip` son opcionales (PaginationDto)."
+          },
+          "response": []
+        },
+        {
+          "id": "5a8043a4-5902-4ab3-8da5-02e5d082bede",
+          "name": "Buscar estudiante (id, name o nickname)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/student/:term",
+              "host": ["{{baseUrl}}"],
+              "path": ["student", ":term"],
+              "variable": [
+                {
+                  "key": "term",
+                  "value": "{{studentTerm}}",
+                  "description": "UUID del estudiante, o su name/nickname (ver findOne en student.service.ts)"
+                }
+              ]
+            },
+            "description": "Busca un estudiante por id (si `term` es un UUID válido) o por name/nickname (comparación case-insensitive). Incluye sus grades en la respuesta."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
