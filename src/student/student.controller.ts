@@ -24,8 +24,8 @@ export class StudentController {
   }
 
   @Patch(":id")
-  update(@Param("id") email: string, @Body() updateStudentDto: UpdateStudentDto){
-    return this.studentService.update(email, updateStudentDto);
+  update(@Param("id") id: string, @Body() updateStudentDto: UpdateStudentDto){
+    return this.studentService.update(id, updateStudentDto);
   }
 
   @Delete(":id")

@@ -2,7 +2,7 @@
 
 Proyecto base para las prácticas del curso **Computación en Internet 3**. Es una API REST construida con [NestJS](https://nestjs.com/) que se conecta a una base de datos **PostgreSQL** usando **TypeORM**.
 
-Este repositorio sirve como punto de partida: trae la configuración inicial (conexión a la base de datos, validaciones globales, prefijo de rutas) y el módulo `student`, que ya tiene sus entidades (`Student` y `Grades`, relacionadas 1:N), DTOs de creación y paginación, y los endpoints de crear, listar y buscar. Actualizar y eliminar quedan como siguiente paso para completar en clase.
+Este repositorio sirve como punto de partida: trae la configuración inicial (conexión a la base de datos, validaciones globales, prefijo de rutas) y el módulo `student`, que ya tiene sus entidades (`Student` y `Grades`, relacionadas 1:N), DTOs de creación, actualización y paginación, y el CRUD completo: crear, listar, buscar, actualizar (con transacción) y eliminar.
 
 ## Stack y dependencias
 
@@ -47,10 +47,11 @@ src/
 ├── app.module.ts                # Módulo raíz: config, conexión a la BD, módulos de features
 └── student/
     ├── student.module.ts        # Módulo de la feature "student" (registra Student y Grades con TypeOrmModule.forFeature)
-    ├── student.controller.ts    # Rutas HTTP de "student": crear, listar, buscar
+    ├── student.controller.ts    # Rutas HTTP de "student": crear, listar, buscar, actualizar, eliminar
     ├── student.service.ts       # Lógica de negocio de "student"
     ├── dto/
     │   ├── create-student.dto.ts  # Reglas de validación para crear un student (incluye sus grades)
+    │   ├── update-student.dto.ts  # DTO de actualización: PartialType(CreateStudent), todos los campos opcionales
     │   └── pagination.dto.ts      # Query params `limit`/`skip` para paginar el listado
     └── entities/
         ├── student.entity.ts      # Entidad TypeORM: tabla "student"
@@ -144,6 +145,8 @@ Con el prefijo global `api` (definido en `main.ts`) y el prefijo `student` del c
 | `POST` | `/api/student` | Crea un estudiante (opcionalmente con sus notas) | `{ name, age, email, isActive, gender, favoriteSubjects?, grades? }` |
 | `GET` | `/api/student` | Lista estudiantes, paginado | Query: `limit?` (cantidad), `skip?` (offset) |
 | `GET` | `/api/student/:term` | Busca un estudiante por `id` (UUID), por `name` o por `nickname` | — |
+| `PATCH` | `/api/student/:id` | Actualiza un estudiante por `id`. Si se envía `grades`, **reemplaza** todas sus notas | Cualquier subconjunto de los campos de creación |
+| `DELETE` | `/api/student/:id` | Elimina un estudiante (y sus notas, por el `onDelete: "CASCADE"`) | — |
 
 Ejemplos de request:
 
@@ -170,11 +173,24 @@ curl "http://localhost:9000/api/student?limit=10&skip=0"
 # Buscar por id, por nombre o por nickname
 curl http://localhost:9000/api/student/<uuid>
 curl http://localhost:9000/api/student/ana_perez21
+
+# Actualizar (solo los campos enviados; si va "grades", reemplaza la lista completa)
+curl -X PATCH http://localhost:9000/api/student/<uuid> \
+  -H "Content-Type: application/json" \
+  -d '{
+    "age": 22,
+    "grades": [
+      { "subject": "Math", "grade": 95 },
+      { "subject": "History", "grade": 85 },
+      { "subject": "Physics", "grade": 80 }
+    ]
+  }'
+
+# Eliminar
+curl -X DELETE http://localhost:9000/api/student/<uuid>
 ```
 
-También hay una **colección de Postman lista para importar** en [`postman/compunet3-nestjs-postgres.postman_collection.json`](postman/compunet3-nestjs-postgres.postman_collection.json) con estas mismas peticiones (ver [Colección de Postman](#colección-de-postman)).
-
-Actualizar y eliminar todavía no están implementados — son el siguiente paso del CRUD que se completará en clase.
+También hay una **colección de Postman lista para importar** en [`postman/compunet3-nestjs-postgres.postman_collection.json`](postman/compunet3-nestjs-postgres.postman_collection.json) con las peticiones de crear, listar y buscar (ver [Colección de Postman](#colección-de-postman)).
 
 ## Colección de Postman
 
@@ -187,7 +203,7 @@ Para usarla:
 3. Para "Buscar estudiante", completar la variable de colección `studentTerm` (o editar el valor directamente en la pestaña **Params** del request) con el `id`, `name` o `nickname` de un estudiante que ya hayan creado.
 4. Con la app corriendo (`npm run start:dev`) y la base de datos disponible, ejecutar las peticiones en orden: primero crear, después listar/buscar.
 
-Cuando implementen `update`/`delete` en clase, agreguen esos requests a la misma carpeta "Student" de la colección para mantenerla al día.
+La colección todavía no incluye los requests de actualizar (`PATCH`) y eliminar (`DELETE`): agréguenlos a la misma carpeta "Student" para mantenerla al día.
 
 ## Puntos clave
 
@@ -207,7 +223,7 @@ Estos son los conceptos importantes que se están usando en este proyecto y que 
 
 - **Prefijo global de rutas** (`app.setGlobalPrefix('api')` en `main.ts`): todas las rutas de la aplicación quedan bajo `/api`. Cada controlador agrega su propio prefijo encima (`@Controller('student')`), por eso la ruta final es `/api/student`. Al agregar nuevos módulos (por ejemplo `course`, `enrollment`) solo hace falta definir el `@Controller('course')` correspondiente; el `/api` ya queda cubierto por el prefijo global.
 
-- **DTOs + `class-validator`/`class-transformer`**: los DTOs (`create-*.dto.ts`, `update-*.dto.ts`) son las clases que definen la forma y las reglas de validación de los datos que entran por la API. `CreateStudent` (`src/student/dto/create-student.dto.ts`) valida `name`, `age`, `email`, `isActive`, `gender` (`@IsIn(['Male', 'Female', 'Other'])`) y, de forma opcional, `favoriteSubjects` y `grades`. `@nestjs/mapped-types` (`PartialType`) permite crear el DTO de actualización reutilizando el de creación, sin duplicar campos — todavía no se ha creado ese `update-student.dto.ts`.
+- **DTOs + `class-validator`/`class-transformer`**: los DTOs (`create-*.dto.ts`, `update-*.dto.ts`) son las clases que definen la forma y las reglas de validación de los datos que entran por la API. `CreateStudent` (`src/student/dto/create-student.dto.ts`) valida `name`, `age`, `email`, `isActive`, `gender` (`@IsIn(['Male', 'Female', 'Other'])`) y, de forma opcional, `favoriteSubjects` y `grades`. `@nestjs/mapped-types` (`PartialType`) permite crear el DTO de actualización reutilizando el de creación, sin duplicar campos: `UpdateStudentDto` (`src/student/dto/update-student.dto.ts`) es `PartialType(CreateStudent)`, así que tiene las mismas reglas de validación pero todos los campos son opcionales.
 
 - **Entidades TypeORM** (`src/student/entities/student.entity.ts`): la clase `Student`, decorada con `@Entity()`, define la tabla `student` en la base de datos. Cada `@Column()` es una columna (`name`, `age`, `email` con `unique: true`, `isActive`, `gender`, `favoriteSubjects` como `text` con `array: true`, `nickname`). `@PrimaryGeneratedColumn("uuid")` hace que el `id` se genere automáticamente como UUID.
 
@@ -223,6 +239,14 @@ Estos son los conceptos importantes que se están usando en este proyecto y que 
 
 - **Búsqueda flexible en `findOne`** (`GET /api/student/:term`): si el `term` es un UUID (`isUUID()` de `class-validator`) se busca por `id` con `findOneBy`; si no, se arma un `createQueryBuilder()` que compara `UPPER(name)` o `nickname` contra el término, y hace `leftJoinAndSelect("student.grades", ...)` para traer también sus notas.
 
+- **Actualización con `preload`** (`PATCH /api/student/:id` → `StudentService.update`): `studentRepository.preload({ id, ...studentDetails })` busca el estudiante por `id` y le mezcla encima los campos que llegaron en el `body`, sin guardar todavía. Si no existe devuelve `undefined` y el servicio responde con `NotFoundException`.
+
+- **Transacciones con `QueryRunner`** (`StudentService.update`): como actualizar un estudiante con notas implica varias operaciones (borrar las notas viejas y guardar el estudiante con las nuevas), se hacen dentro de una transacción: `datasource.createQueryRunner()` → `connect()` → `startTransaction()`, las operaciones con `queryRunner.manager`, y al final `commitTransaction()`. Si algo falla, `rollbackTransaction()` deshace todo, para no dejar un estudiante sin notas a medias. En ambos casos se llama `release()` para devolver la conexión al pool.
+
+- **Las `grades` se reemplazan, no se agregan**: si el `body` del `PATCH` trae `grades`, el servicio borra **todas** las notas actuales del estudiante (`queryRunner.manager.delete(Grades, { student: { id } })`) y guarda solo las que vienen en la petición. Para agregar una materia nueva hay que enviar la lista completa (las anteriores más la nueva). Si el `body` no trae `grades`, las notas no se tocan.
+
+- **Eliminación** (`DELETE /api/student/:id` → `StudentService.removeStudent`): busca el estudiante con `findOne` y lo borra con `studentRepository.remove(student)`. Sus notas se eliminan en la base de datos gracias al `onDelete: "CASCADE"` de la relación.
+
 ## ⚠️ Cosas a revisar (para practicar debugging)
 
 - En `src/app.module.ts`, la línea `port: +!process.env.DB_PORT` no calcula el puerto correctamente: el operador `!` niega el valor *antes* de convertirlo a número, por lo que el puerto configurado en `DB_PORT` nunca se usa como tal. Es un buen ejercicio identificar por qué y corregirlo (pista: comparar con cómo se leen las demás variables de entorno en el mismo bloque).
@@ -232,6 +256,10 @@ Estos son los conceptos importantes que se están usando en este proyecto y que 
 - Ese mismo `error.code === '23505'` se traduce hoy en un `InternalServerErrorException` (500). Una violación de `unique` (por ejemplo, un `email` repetido) es un error del cliente, no del servidor: ¿qué excepción de Nest (`BadRequestException`, `ConflictException`, etc.) describe mejor ese caso?
 
 - En `src/student/entities/student.entity.ts`, `checkNicknameInsert`/`checkNicknameUpdate` arman el `nickname` con `this.nickname.toLowerCase().replace(" ", "_")`. `String.replace` con un string (no una expresión regular con `/g`) solo reemplaza la **primera** coincidencia, así que un nombre con varios espacios ("Ana María Pérez") no queda completamente convertido a `snake_case`. ¿Cómo lo arreglarían para que reemplace todos los espacios?
+
+- En `src/student/student.controller.ts`, el método `update` recibe `@Param("id") email: string`: el parámetro se llama `email` pero en realidad trae el `id` (UUID) del estudiante. Funciona, pero confunde al leerlo: ¿qué nombre debería tener?
+
+- `PATCH` con `grades` reemplaza todas las notas (ver [Puntos clave](#puntos-clave)). ¿Cómo cambiarían `update` para que una materia nueva se **agregue** y una que ya existe solo actualice su nota? Pista: si solo quitan el `delete`, TypeORM deja las notas que no están en el arreglo sin estudiante (`studentId` en `NULL`), así que hay que combinar las notas actuales con las nuevas.
 
 ## Pruebas
 
