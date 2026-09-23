@@ -1,11 +1,12 @@
 import { Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Student } from './entities/student.entity';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { CreateStudent } from './dto/create-student.dto';
 import { PaginationDto } from './dto/pagination.dto';
 import { isUUID } from 'class-validator';
 import { Grades } from './entities/grades.entity';
+import { UpdateStudentDto } from './dto/update-student.dto';
 
 @Injectable()
 export class StudentService {
@@ -16,7 +17,8 @@ export class StudentService {
         @InjectRepository(Grades)
         private readonly gradesRepository: Repository<Grades>,
         @InjectRepository(Student)
-        private readonly studentRepository: Repository<Student>
+        private readonly studentRepository: Repository<Student>,
+        private datasource: DataSource
     ){}
 
     async createStudent(createStudentDto: CreateStudent): Promise<Student | undefined>{
@@ -68,6 +70,46 @@ export class StudentService {
         }catch(error){
             this.handleException(error);
         }
+    }
+
+    async update(id: string, updateStudentDto: UpdateStudentDto){
+        const {grades, ...studentDetails} = updateStudentDto;
+        const student = await this.studentRepository.preload({
+            id: id,
+            ...studentDetails
+        })
+
+        if(!student) throw new NotFoundException(`Student with id ${id} not found`);
+
+        const queryRunner = this.datasource.createQueryRunner();
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+
+        try{
+            if(grades){
+                student.grades = grades.map( grade => this.gradesRepository.create(grade));
+                await queryRunner.manager.delete(Grades, {student:{id}});
+
+            }
+
+            await queryRunner.manager.save(student);
+            await queryRunner.commitTransaction();
+            await queryRunner.release();
+
+            return await this.findOne(student.id);
+
+        }catch(error){
+            await queryRunner.rollbackTransaction();
+            await queryRunner.release();
+            this.handleException(error);
+        }
+
+    }
+
+    async removeStudent(id: string){
+        const student = await this.findOne(id);
+        if(!student) throw new NotFoundException(`Student with id ${id} not found`);
+        await this.studentRepository.remove(student);
     }
 
     private handleException(error:any){
